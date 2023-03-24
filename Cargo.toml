@@ -1,0 +1,82 @@
+[package]
+name = "esp-clock-nostd"
+version = "0.1.0"
+authors = ["Kirill Mikhailov <playfulfence@gmail.com>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+mipidsi = { git = "https://github.com/almindor/mipidsi" }
+smoltcp = { version = "0.9.1", default-features=false, features = ["proto-igmp", "proto-ipv4", "socket-tcp", "socket-icmp", "socket-udp", "medium-ethernet", "proto-dhcpv4", "socket-raw", "socket-dhcpv4"]}
+display-interface = "0.4.1"
+display-interface-spi = "0.4.1"
+embedded-graphics = "0.7.1"
+embedded-graphics-core = "0.3.3"
+embedded-hal = "0.2.7"
+profont = "0.6.1"
+libm = "0.2.6"
+cfg-if = "1.0.0"
+toml-cfg = "0.1.3"
+embedded-io = "0.4.0"
+embedded-svc = { version = "0.23.1", default-features = false, features = [] }
+no-std-net = "0.6.0"
+sntpc = { version = "0.3.2", default-features = false, features = [] }
+bleps = { git = "https://github.com/bjoernQ/bleps", package = "bleps", rev = "33fde67257bfbc6c0aebf7649fd302c82ed94c64" }
+bleps-macros = { git = "https://github.com/bjoernQ/bleps", package = "bleps-macros", rev = "33fde67257bfbc6c0aebf7649fd302c82ed94c64" }
+heapless = { version = "0.7.14", default-features = false }
+
+[target.xtensa-esp32-none-elf.dependencies]
+esp32-hal = { version = "0.10.0", optional = true, features = [ "rt" ] }
+esp-wifi = { version = "0.1.0", git = "https://github.com/esp-rs/esp-wifi", package = "esp-wifi", features = ["esp32","esp32-async", "esp-now", "ble"]}
+esp-println = { version = "0.4.0", features = ["esp32"] }
+esp-backtrace = { git = "https://github.com/esp-rs/esp-backtrace", version = "0.6.0", features = [
+    "esp32",
+    "panic-handler",
+    "print-uart",
+] }
+
+[target.xtensa-esp32s2-none-elf.dependencies]
+esp32s2-hal = { version = "0.7.0", optional = true, features = [ "rt" ] }
+esp-wifi = { version = "0.1.0", git = "https://github.com/esp-rs/esp-wifi", package = "esp-wifi", features = ["esp32s2","esp32s2-async", "esp-now", "ble"]}
+esp-backtrace = { git = "https://github.com/esp-rs/esp-backtrace", version = "0.6.0", features = [
+    "esp32s2",
+    "panic-handler",
+    "print-uart",
+] }
+esp-println = { version = "0.4.0", features = [ "esp32s2" ] }
+
+[target.xtensa-esp32s3-none-elf.dependencies]
+esp32s3-hal = { version = "0.7.0", optional = true, features = [ "rt" ] }
+esp-wifi = {git = "https://github.com/esp-rs/esp-wifi", package = "esp-wifi", features = ["esp32s3","esp32s3-async", "esp-now", "ble"]}
+esp-backtrace = { git = "https://github.com/esp-rs/esp-backtrace", version = "0.6.0", features = [
+    "esp32s3",
+    "panic-handler",
+    "print-uart",
+] }
+esp-println = { version = "0.4.0", features = [ "esp32s3" ] }
+
+[target.riscv32imc-unknown-none-elf.dependencies]
+esp32c3-hal = { version = "0.7.0", optional = true }
+esp-wifi = { git = "https://github.com/esp-rs/esp-wifi", package = "esp-wifi", features = ["esp32c3","ble", "embedded-svc", "wifi"]}
+esp-backtrace = { git = "https://github.com/esp-rs/esp-backtrace", version = "0.6.0", features = [
+    "esp32c3",
+    "panic-handler",
+    "print-uart",
+] }
+esp-println = { version = "0.4.0", features = [ "esp32c3" ] }
+
+[features]
+default = ["rt", "eh1", "wifi"]
+rt = [] # for esp32c3 chip
+# eh1 = ["esp32s3"]
+# eh1 = ["esp32-hal/eh1", "esp32"]
+# eh1 = ["esp32s2-hal/eh1", "esp32s2"]
+eh1 = ["esp32c3-hal/eh1", "esp32c3"]
+
+esp32 = []
+esp32s2 = []
+esp32s3 = []
+esp32c3 = []
+
+wifi = []
+
