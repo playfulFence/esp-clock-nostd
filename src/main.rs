@@ -220,19 +220,24 @@ let mut delay = Delay::new(&clocks);
     let mut tx_buffer = [0u8; 1536];
     let mut socket = wifi_stack.get_socket(&mut rx_buffer, &mut tx_buffer);
 
-    let mut request:[u8; NTP_PACKET_SIZE] = build_ntp_request();
+    // let mut request:[u8; NTP_PACKET_SIZE] = build_ntp_request();
+
+    let mut request = [0u8; 48];
+    request[0] = 0x1b; // LI, Version, Mode
+
+    println!("your request is: {:?}", request);
 
     loop {
         println!("Making HTTP request");
         socket.work();
 
         socket
-            .open(Ipv4Address::new(216, 239, 35, 0), 123)
-            .unwrap();
+        .open(Ipv4Address::new(213, 188, 196, 246), 80)
+        .unwrap();
 
 
         socket
-            .write(&request)
+            .write("GET /api/timezone/Europe/London HTTP/1.1\r\nHost: worldtimeapi.org\r\n\r\n".as_bytes())
             .unwrap();
         socket.flush().unwrap();
 
