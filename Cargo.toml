@@ -57,7 +57,7 @@ esp-println = { version = "0.4.0", features = [ "esp32s3" ] }
 
 [target.riscv32imc-unknown-none-elf.dependencies]
 esp32c3-hal = { version = "0.7.0", optional = true }
-esp-wifi = { git = "https://github.com/esp-rs/esp-wifi", package = "esp-wifi", features = ["esp32c3","ble", "embedded-svc", "wifi"]}
+esp-wifi = { git = "https://github.com/esp-rs/esp-wifi", package = "esp-wifi", features = ["esp32c3", "embedded-svc", "wifi"]}
 esp-backtrace = { git = "https://github.com/esp-rs/esp-backtrace", version = "0.6.0", features = [
     "esp32c3",
     "panic-handler",
@@ -79,4 +79,3 @@ esp32s3 = []
 esp32c3 = []
 
 wifi = []
-
