@@ -41,7 +41,7 @@ use smoltcp::wire::Ipv4Address;
 
 use core::mem::transmute;
 use core::time::Duration;
-
+use lexical_core;
 
 
 // #[toml_cfg::toml_config]
@@ -56,68 +56,78 @@ const NTP_VERSION: u8 = 0b00100011; // NTP version 4, mode 3 (client)
 const NTP_MODE: u8 = 0b00000011;
 const NTP_PACKET_SIZE: usize = 48;
 const NTP_TIMESTAMP_DELTA: u64 = 2_208_988_800; // 70 years in seconds (since 01.01.1900)
+const TIMESTAMP_LEN : usize = 10;
+const UNIXTIME_LEN : usize = 8;
 
 
-// Define a struct for the NTP request packet
-#[repr(C)]
-pub struct NtpRequest {
-    li_vn_mode: u8,
-    stratum: u8,
-    poll: u8,
-    precision: u8,
-    root_delay: u32,
-    root_dispersion: u32,
-    reference_id: [u8; 4],
-    reference_timestamp: u64,
-    originate_timestamp: u64,
-    receive_timestamp: u64,
-    transmit_timestamp: u64,
+// 1
+
+// Define a struct for the NTP request   LI |VN |mod|     stratum     |       poll      |     precision   | root delay | root dispersion | reference ID | reference timestamp | originate timestamp | receive timestamp | transmit timestamp |
+                                        //00 100 011| 0 0 0 0 0 0 0 0 | 0 0 0 0 0 0 0 0 | 0 0 0 0 0 0 0 0 | _
+
+
+
+
+type NtpRequest = [u8;NTP_PACKET_SIZE];
+
+
+pub fn new_request(timestamp: u64) -> NtpRequest {
+    let mut buf:[u8;48] = [0u8; 48];
+
+    // Set Leap Indicator (LI), Protocol Version (VN), and Mode (3 = Client)
+    buf[0] = 0b00_011_011;
+
+    // Set Stratum (0 = unspecified)
+    buf[1] = 0;
+
+    // Set Poll Interval (4 = 16 seconds)
+    buf[2] = 4;
+
+    // Set Precision (-6 = 15.26 microseconds)
+    buf[3] = 0xFA;
+
+    // Set Root Delay
+    buf[4] = 0;
+    buf[5] = 0;
+    buf[6] = 0;
+    buf[7] = 0;
+
+    // Set Root Dispersion
+    buf[8] = 0;
+    buf[9] = 0;
+    buf[10] = 0;
+    buf[11] = 0;
+
+    // Set Reference Identifier (unspecified)
+    buf[12] = 0;
+    buf[13] = 0;
+    buf[14] = 0;
+    buf[15] = 0;
+
+    // Set Originate Timestamp to current time
+    let secs = timestamp + 2_208_988_800;
+    let frac = ((timestamp % 1_000_000_000) as f64 / 1_000_000_000.0) * ((2.0 as u32).pow(32) as f64);
+    let frac = frac as u32;
+    buf[16..24].copy_from_slice(&secs.to_be_bytes());
+    buf[24..32].copy_from_slice(&frac.to_be_bytes());
+
+    // Leave Transmit Timestamp and Receive Timestamp as 0
+
+    buf
+
 }
 
-// Implementation of NtpRequest
-impl NtpRequest {
-    pub fn new() -> NtpRequest {
-        NtpRequest {
-            li_vn_mode: NTP_VERSION, // 3 | 4 << 3 
-            stratum: 0,
-            poll: 0,
-            precision: 0,
-            root_delay: 0,
-            root_dispersion: 0,
-            reference_id: [0; 4],
-            reference_timestamp: 0,
-            originate_timestamp: 0,
-            receive_timestamp: 0,
-            transmit_timestamp: 0,
+
+fn find_uxtime(response: &str) -> u64 {
+    let response_len = response.len();
+
+    for i in 0..(response_len - UNIXTIME_LEN + 1) {
+        if &response[i..(i + UNIXTIME_LEN)] == "unixtime" {
+            return lexical_core::parse(&response[i+UNIXTIME_LEN+2..i+UNIXTIME_LEN+2+UNIXTIME_LEN].as_bytes()).unwrap();
         }
     }
-}
 
-// Function to convert a u64 timestamp to NTP format
-fn to_ntp_time(timestamp: u64) -> u64 {
-    let duration = Duration::from_secs(timestamp + NTP_TIMESTAMP_DELTA);
-    let seconds = duration.as_secs() as u64;
-    let fraction = ((duration.subsec_nanos() as u64) << 32) / 1_000_000_000;
-    (seconds << 32) | fraction
-}
-
-// Function to assemble an NTP request packet
-pub fn build_ntp_request() -> [u8; NTP_PACKET_SIZE] {
-    let mut packet = [0u8; NTP_PACKET_SIZE];
-    let mut request = NtpRequest::new();
-
-    request.transmit_timestamp = to_ntp_time(0); // Set transmit timestamp to 0
-    request.originate_timestamp = to_ntp_time(0); // Set originate timestamp to 0
-
-    unsafe {
-        // Convert NtpRequest struct to byte array
-        let request_bytes = transmute::<NtpRequest, [u8; NTP_PACKET_SIZE]>(request);
-
-        // Copy byte array to packet buffer
-        packet.copy_from_slice(&request_bytes);
-    }
-
-    packet
+    0
 }
 
 
@@ -220,7 +230,7 @@ let mut delay = Delay::new(&clocks);
     let mut tx_buffer = [0u8; 1536];
     let mut socket = wifi_stack.get_socket(&mut rx_buffer, &mut tx_buffer);
 
-    // let mut request:[u8; NTP_PACKET_SIZE] = build_ntp_request();
+
 
     let mut request = [0u8; 48];
     request[0] = 0x1b; // LI, Version, Mode
@@ -237,7 +247,7 @@ let mut delay = Delay::new(&clocks);
 
 
         socket
-            .write("GET /api/timezone/Europe/London HTTP/1.1\r\nHost: worldtimeapi.org\r\n\r\n".as_bytes())
+            .write("GET /api/timezone/Europe/Prague HTTP/1.1\r\nHost: worldtimeapi.org\r\n\r\n".as_bytes())
             .unwrap();
         socket.flush().unwrap();
 
