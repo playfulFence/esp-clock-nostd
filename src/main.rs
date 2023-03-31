@@ -30,12 +30,13 @@ use embedded_svc::ipv4::Interface;
 use embedded_svc::wifi::{AccessPointInfo, ClientConfiguration, Configuration, Wifi};
 
 use esp_backtrace as _;
-// use esp_println::logger::init_logger;
+//use esp_println::logger::init_logger;
 use esp_println::{print, println};
 use esp_wifi::wifi::utils::create_network_interface;
 use esp_wifi::wifi::{WifiError, WifiMode};
 use esp_wifi::wifi_interface::WifiStack;
 use esp_wifi::{current_millis, initialize};
+
 use smoltcp::iface::SocketStorage;
 use smoltcp::wire::Ipv4Address;
 
@@ -58,6 +59,15 @@ const NTP_PACKET_SIZE: usize = 48;
 const NTP_TIMESTAMP_DELTA: u64 = 2_208_988_800; // 70 years in seconds (since 01.01.1900)
 const TIMESTAMP_LEN : usize = 10;
 const UNIXTIME_LEN : usize = 8;
+
+fn is_char_in_str(s: &str, c: char) -> bool {
+    for byte in s.as_bytes() {
+        if *byte == c as u8 {
+            return true;
+        }
+    }
+    false
+}
 
 
 // 1
@@ -123,14 +133,15 @@ fn find_uxtime(response: &str) -> u64 {
 
     for i in 0..(response_len - UNIXTIME_LEN + 1) {
         if &response[i..(i + UNIXTIME_LEN)] == "unixtime" {
-            return lexical_core::parse(&response[i+UNIXTIME_LEN+2..i+UNIXTIME_LEN+2+UNIXTIME_LEN].as_bytes()).unwrap();
+            return lexical_core::parse(&response[i+UNIXTIME_LEN+2..i+UNIXTIME_LEN+2+TIMESTAMP_LEN].as_bytes()).unwrap();
         }
     }
 
     0
 }
 
-
+const SSID: &str = "EspressifSystems";
+const PASSWORD: &str = "Espressif32";
 
 #[entry]
 fn main() -> ! {
@@ -153,36 +164,45 @@ fn main() -> ! {
     let timer_group1 = TimerGroup::new(peripherals.TIMG1, &clocks);
     let mut wdt1 = timer_group1.wdt;
 
-
-
-
-
-let mut delay = Delay::new(&clocks);
+   let mut delay = Delay::new(&clocks);
     
     rtc.rwdt.disable();
     wdt0.disable();
     wdt1.disable();
 
-    println!("About to initialize the SPI LED driver ILI9341");
-    let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
+    // println!("About to initialize the SPI LED driver ILI9341");
+    // let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
 
+    initialize(
+        timer,
+        Rng::new(peripherals.RNG),
+        system.radio_clock_control,
+        &clocks,
+    )
+    .unwrap();
+
+    let (wifi, _) = peripherals.RADIO.split();
     let mut socket_set_entries: [SocketStorage; 3] = Default::default();
     let (iface, device, mut controller, sockets) =
-        create_network_interface(WifiMode::Sta, &mut socket_set_entries);
+        create_network_interface(wifi, WifiMode::Sta, &mut socket_set_entries);
     let wifi_stack = WifiStack::new(iface, device, sockets, current_millis);
 
-    initialize(timer, Rng::new(peripherals.RNG), &clocks).unwrap();
-
     let client_config = Configuration::Client(ClientConfiguration {
-        ssid: "EspressifSystems".into(),
-        password: "Espressif32".into(),
+        ssid: SSID.into(),
+        password: PASSWORD.into(),
         ..Default::default()
     });
     let res = controller.set_configuration(&client_config);
     println!("wifi_set_configuration returned {:?}", res);
 
-    controller.start();
-    println!("is wifi started: {:?}", controller.is_started());
+    controller.start().unwrap();
+    println!("is wifi started: {:?}", controller.is_started());println!("Start Wifi Scan");
+    let res: Result<(heapless::Vec<AccessPointInfo, 10>, usize), WifiError> = controller.scan_n();
+    if let Ok((res, _count)) = res {
+        for ap in res {
+            println!("{:?}", ap);
+        }
+    }
 
     println!("Start Wifi Scan");
     let res: Result<(heapless::Vec<AccessPointInfo, 10>, usize), WifiError> = controller.scan_n();
@@ -230,12 +250,10 @@ let mut delay = Delay::new(&clocks);
     let mut tx_buffer = [0u8; 1536];
     let mut socket = wifi_stack.get_socket(&mut rx_buffer, &mut tx_buffer);
 
+    let mut timestamp: &str;
 
-
-    let mut request = [0u8; 48];
-    request[0] = 0x1b; // LI, Version, Mode
-
-    println!("your request is: {:?}", request);
+    let mut found: bool = false;
+    let mut checked: bool = false;
 
     loop {
         println!("Making HTTP request");
@@ -251,28 +269,54 @@ let mut delay = Delay::new(&clocks);
             .unwrap();
         socket.flush().unwrap();
 
-        let wait_end = current_millis() + 20 * 1000;
+                let wait_end = current_millis() + 20 * 1000;
         loop {
-            let mut buffer = [0u8; 512];
+            let mut buffer = [0u8; 530];
             if let Ok(len) = socket.read(&mut buffer) {
                 let to_print = unsafe { core::str::from_utf8_unchecked(&buffer[..len]) };
                 print!("{}", to_print);
             } else {
                 break;
             }
-
-            if current_millis() > wait_end {
-                println!("Timeout");
-                break;
-            }
         }
-        println!();
 
         socket.disconnect();
 
-    let wait_end = current_millis() + 5 * 1000;
-        while current_millis() < wait_end {
-            socket.work();
-        }
+        let wait_end = current_millis() + 5 * 1000;
+            while current_millis() < wait_end {
+                socket.work();
+            }
+
+        // if(found == true && to_print.len() > 5 && (is_char_in_str(to_print,  '}') || checked == true)) {
+        //         println!("\nParsing timestamp...");
+        //         let timestamp = find_uxtime(to_print);
+            
+        //         if (timestamp == 0) 
+        //         {
+        //             println!("Timestamp not found, trying again...");
+        //             found = false;
+        //             continue;
+        //         } 
+            
+                // println!("Timestamp: {}", timestamp);
+                // let mut request = new_request(timestamp);
+                // println!("your request is: {:?}", request);
+            // }
+    }
+
+    // println!("\nParsing timestamp...");
+    // let timestamp = find_uxtime(to_print);
+
+    // if (timestamp == 0) 
+    // {
+    //     println!("Timestamp not found, trying again...");
+    //     break;
+    // } 
+
+    // println!("Timestamp: {}", timestamp);
+    // let mut request = new_request(timestamp);
+    // println!("your request is: {:?}", request);
+    loop {
+        
     }
 }
